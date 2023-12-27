@@ -1,0 +1,2 @@
+# solManager
+Manage solana wallets
