@@ -1,0 +1,14 @@
+{
+  "wallets": [
+    {
+      "name": "Lala",
+      "publicKey": "JCt96RQGDosV7gSA4oyXtViy2b91MFoJQWY28pac6TSJ",
+      "privateKey": "5uH7G4UadcxoRHbMN6MbjGAdRFzF5WGz62d2xE1SJeLYZby9TtEnbYueVurdqpouZeKC3hG4ts5gdbTcuQJFBG6n"
+    },
+    {
+      "name": "LLL",
+      "publicKey": "As19FGNvRaEkAy9Y3YDCR1DHUssmdtk4NGmB8UCrDR8L",
+      "privateKey": "vRH5hAUJdsY6RVco8zWFfhKJThyjx9ruSgp2S2eUSu1iUdQ6Te5PZS2CccMBrPcQ2KPK1h5mLFkwBe4WfbsVQr4"
+    }
+  ]
+}
