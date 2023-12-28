@@ -73,7 +73,7 @@ const addExistingWallet = (name, privateKey) => {
   
     console.log(`Transaction successful! ${solanaAmount} Solana transferred to ${receiverPublicKey}`);
     console.log('Transaction Signature:', signature);
-    await wait(2000);
+    await wait(1000);
   };
   const setMainWallet = async () => {
     const { wallets } = readWalletsFile();
