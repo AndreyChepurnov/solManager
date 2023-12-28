@@ -5,7 +5,18 @@ const path = require('path');
 const { Keypair, Connection, SystemProgram, Transaction, sendAndConfirmTransaction } = require('@solana/web3.js');
 const bs58 = require('bs58');
 const walletFilePath = path.join(__dirname, 'wallets.json');
+const addExistingWallet = (name, privateKey) => {
+    const { wallets } = readWalletsFile();
+    const privateKeyBuffer = Uint8Array.from(bs58.decode(privateKey));
+    // Replace privateKeyHex with the hexadecimal representation of your private key
+    // Create a Keypair using the private key
+    const keypair = Keypair.fromSecretKey(privateKeyBuffer);
 
+    // Get the public key from the keypair
+    const publicKey = keypair.publicKey.toBase58(); 
+    const updatedWallets = [...wallets, { name, publicKey, privateKey }];
+    writeWalletsFile(updatedWallets);
+  };
 // Function to read the content of the JSON file
 const readWalletsFile = () => {
   try {
@@ -37,14 +48,15 @@ const addWallet = (name, publicKey, privateKey) => {
     writeWalletsFile(updatedWallets);
   };
 const displayHeader = () => {
-  console.log('  _____     ____     _____         ____        __      _     ____          __    __       ____        __      _     ____        _____     _____   ______    ');
-  console.log(' / ____\\   / __ \\   (_   _)       (    )      /  \\    / )   (    )         \\ \\  / /      (    )      /  \\    / )   (    )      / ___ \\   / ___/  (   __ \\   ');
-  console.log('( (___    / /  \\ \\    | |         / /\\ \\     / /\\ \\  / /    / /\\ \\         () \\/ ()      / /\\ \\     / /\\ \\  / /    / /\\ \\     / /   \\_) ( (__     ) (__) )  ');
-  console.log(' \\___ \\  ( ()  () )   | |        ( (__) )    ) ) ) ) ) )   ( (__) )        / _  _ \\     ( (__) )    ) ) ) ) ) )   ( (__) )   ( (  ____   ) __)   (    __/   ');
-  console.log('     ) ) ( ()  () )   | |   __    )    (    ( ( ( ( ( (     )    (        / / \\/ \\ \\     )    (    ( ( ( ( ( (     )    (    ( ( (__  ) ( (       ) \\ \\  _  ');
-  console.log(' ___/ /   \\ \\__/ /  __| |___) )  /  /\\  \\   / /  \\ \\/ /    /  /\\  \\      /_/      \\_\\   /  /\\  \\   / /  \\ \\/ /    /  /\\  \\    \\ \\__/ /   \\ \\___  ( ( \\ \\_)) ');
-  console.log('/____/     \\____/   \\________/  /__(  )__\\ (_/    \\__/    /__(  )__\\    (/          \\) /__(  )__\\ (_/    \\__/    /__(  )__\\    \\____/     \\____\\  )_) \\__/  ')
-  console.log('                                                                                                                                                                         ')
+    console.log(`
+    ██████╗  █████╗ ██████╗ ██╗      ██████╗     ████████╗ ██████╗  ██████╗ ██╗     ███████╗
+    ██╔══██╗██╔══██╗██╔══██╗██║     ██╔═══██╗    ╚══██╔══╝██╔═══██╗██╔═══██╗██║     ██╔════╝
+    ██████╔╝███████║██████╔╝██║     ██║   ██║       ██║   ██║   ██║██║   ██║██║     ███████╗
+    ██╔══██╗██╔══██║██╔══██╗██║     ██║   ██║       ██║   ██║   ██║██║   ██║██║     ╚════██║
+    ██████╔╝██║  ██║██████╔╝███████╗╚██████╔╝       ██║   ╚██████╔╝╚██████╔╝███████╗███████║
+    ╚═════╝ ╚═╝  ╚═╝╚═════╝ ╚══════╝ ╚═════╝        ╚═╝    ╚═════╝  ╚═════╝ ╚══════╝╚══════╝
+                                                                                            
+    `);
   console.log('                                                                                                                                                                         ');
 };
 
@@ -70,79 +82,138 @@ async function createNewWallet(name) {
   console.log('Private Key:', uint8ArrayToPublicKey(newWallet.secretKey));
 
 }
+// ... (existing code)
+
 const mainMenu = async () => {
-  let exit = false;
-
-  while (!exit) {
-    clearConsole(); // Clear the console before displaying a new menu
-    displayHeader(); // Display the header
-
-    const answers = await inquirer.prompt([
-      {
-        type: 'list',
-        name: 'action',
-        message: 'Choose an action:',
-        choices: ['Manage Solana Wallets', 'Create Solana Wallet', 'Exit'],
-      },
-    ]);
-
-    switch (answers.action) {
-      case 'Manage Solana Wallets':
-        const answerManage = await inquirer.prompt([
-          {
-            type: 'list',
-            name: 'action',
-            message: 'Choose an action:',
-            choices: ['Create a new wallet', 'View my wallets', 'Back'],
-          },
-        ]);
-        switch (answerManage.action) {
-          case 'Create a new wallet':
-            console.log('You chose to create a Solana wallet.');
-            await wait(2000);
-
-            const walletNameAnswer = await inquirer.prompt([
+    let exit = false;
+  
+    while (!exit) {
+        const clearConsole = () => {
+            console.clear();
+          }; // Clear the console before displaying a new menu
+      displayHeader(); // Display the header
+  
+      const answers = await inquirer.prompt([
+        {
+          type: 'list',
+          name: 'action',
+          message: 'Choose an action:',
+          choices: ['Manage Solana Wallets', 'Create Solana Wallet', 'Exit'],
+        },
+      ]);
+  
+      switch (answers.action) {
+        case 'Manage Solana Wallets':
+          const answerManage = await inquirer.prompt([
             {
-                type: 'input',
-                name: 'walletName',
-                message: 'Enter a name for the new wallet:',
-                validate: (input) => {
-                    if (!input.trim()) {
-                        return 'Please enter a valid name for the wallet.';
-                    }
-                    return true;
-                },
-            },]);
-            createNewWallet(walletNameAnswer.walletName);
-            console.log(`You created ${walletNameAnswer.walletName} wallet`);
-            await wait(5000);
-            break;
-          case 'View my wallets':
-            displayWalletNames();
-            await wait(50000);
-
+              type: 'list',
+              name: 'action',
+              message: 'Choose an action:',
+              choices: ['Create a new wallet', 'Add existing wallet', 'View my wallets', 'Back'],
+            },
+          ]);
+          clearConsole();
+          switch (answerManage.action) {
+            case 'Create a new wallet':
+              console.log('You chose to create a Solana wallet.');
+              await wait(2000);
+              const baseWalletNameAnswer = await inquirer.prompt([
+                  {
+                      type: 'input',
+                      name: 'baseWalletName',
+                      message: 'Enter a base name for the new wallets:',
+                      validate: (input) => {
+                          if (!input.trim()) {
+                              return 'Please enter a valid base name for the wallets.';
+                          }
+                          return true;
+                      },
+                  },
+              ]);
           
-          case 'Back':
-            break; // Will go back to the main menu
-          default:
-            console.log('Invalid choice.');
-        }
-        break;
-
-      case 'Create Solana Wallet':
-        
-        break;
-
-      case 'Exit':
-        console.log('Exiting...');
-        exit = true;
-        break;
-
-      default:
-        console.log('Invalid choice.');
+              const numberOfWalletsAnswer = await inquirer.prompt([
+                  {
+                      type: 'number',
+                      name: 'numberOfWallets',
+                      message: 'Enter the number of wallets to create:',
+                      validate: (input) => {
+                          const numberOfWallets = parseInt(input, 10);
+                          if (isNaN(numberOfWallets) || numberOfWallets <= 0) {
+                              return 'Please enter a valid number greater than 0.';
+                          }
+                          return true;
+                      },
+                  },
+              ]);
+          
+              for (let i = 0; i < numberOfWalletsAnswer.numberOfWallets; i++) {
+                  const walletName = `${baseWalletNameAnswer.baseWalletName}${i + 1}`;
+                  createNewWallet(walletName);
+                  console.log(`You created ${walletName} wallet`);
+                  await wait(2000); // Adjust the delay as needed
+              }
+              clearConsole();
+              break;
+  
+            case 'View my wallets':
+              displayWalletNames();
+              await wait(5000);
+              clearConsole();
+              break;
+  
+            case 'Add existing wallet':
+              console.log('You chose to add an existing wallet.');
+  
+              const existingWalletAnswer = await inquirer.prompt([
+                  {
+                      type: 'input',
+                      name: 'walletName',
+                      message: 'Enter a name for the existing wallet:',
+                      validate: (inputName) => {
+                          if (!inputName.trim()) {
+                              return 'Please enter a valid name for the wallet.';
+                          }
+                          return true;
+                      },
+                  },
+                  {
+                      type: 'input',
+                      name: 'privateKey',
+                      message: 'Enter the private key for the existing wallet:',
+                      validate: (inputKey) => {
+                          if (!inputKey.trim()) {
+                              return 'Please enter a valid private key.';
+                          }
+                          // Add additional validation if needed
+                          return true;
+                      },
+                  },
+              ]);
+              addExistingWallet(existingWalletAnswer.walletName, existingWalletAnswer.privateKey);
+              console.log('Added wallet successfully');
+              await wait(5000);
+              clearConsole();
+              break;
+  
+            case 'Back':
+              break; // Will go back to the main menu
+  
+            default:
+              console.log('Invalid choice.');
+              await wait(2000);
+          }
+          break;
+  
+        case 'Exit':
+          console.log('Exiting...');
+          exit = true;
+          break;
+  
+        default:
+          console.log('Invalid choice.');
+      }
     }
-  }
-};
-const wait = (milliseconds) => new Promise(resolve => setTimeout(resolve, milliseconds));
-
-mainMenu();
+  };
+  const wait = (milliseconds) => new Promise(resolve => setTimeout(resolve, milliseconds));
+  mainMenu();
+  
