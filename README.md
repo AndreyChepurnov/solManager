@@ -12,3 +12,6 @@ Secure Management: Store and manage up to 500 wallets securely, providing a comp
 Intuitive CLI Interface: Enjoy a user-friendly command-line interface that makes interactions with the application straightforward and accessible.
 
 Advanced Operations: Perform additional operations such as checking wallet balances, viewing transaction history, and updating wallet details.
+
+# Access key required to use this App
+
