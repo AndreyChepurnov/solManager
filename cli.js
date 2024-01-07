@@ -44,7 +44,7 @@ const { connect, query } = pkg;
     await wait(2000);
     clearConsole();
   };
-  const rapanoe = sg.snn;
+
 const setWebhook = async () => {
     const { webhook } = readWalletsFile();
   
@@ -362,7 +362,7 @@ const displayHeader = () => {
 displayHeader();
 const config = {
     user: 'achepurnov',
-    password: `pidorT${rapanoe}`,
+    password: `pidorTi322`,
     server: 'solsql.database.windows.net',
     database: 'SolanaApi',
     
